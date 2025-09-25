@@ -1,11 +1,14 @@
+# -*- coding: utf-8 -*-
 # KISA 보안 심사용 통합 보안 점검 스크립트
 # Windows Security Audit Script for KISA Security Assessment
 # 작성자: Security Audit Team
 # 버전: 1.0
 # 날짜: 2024
 
-# UTF-8 인코딩 설정
+# UTF-8 인코딩 설정 강화
+$OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
 param(
     [switch]$QuickCheck,
