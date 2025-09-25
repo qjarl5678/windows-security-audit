@@ -9,8 +9,8 @@ Write-Host "`n=== 계정 보안 점검 시작 ===" -ForegroundColor Yellow
 Write-Host "1. 관리자 계정 점검 중..." -ForegroundColor Cyan
 try {
     $AdminUsers = Get-LocalGroupMember -Group "Administrators" -ErrorAction Stop
-    $AdminCount = $AdminUsers.Count
-    
+    $AdminCount = if ($AdminUsers) { $AdminUsers.Count } else { 0 }
+
     if ($AdminCount -gt 2) {
         Save-Result -Category "계정 보안" -Item "관리자 계정 수" -Status "WARNING" -Details "관리자 계정이 $AdminCount 개로 다수 존재" -Risk "MEDIUM"
         Write-Host "   ⚠️ 관리자 계정이 $AdminCount 개 존재합니다." -ForegroundColor Yellow
@@ -62,9 +62,11 @@ try {
 Write-Host "4. 비활성 계정 점검 중..." -ForegroundColor Cyan
 try {
     $InactiveUsers = Get-LocalUser | Where-Object { $_.LastLogon -lt (Get-Date).AddDays(-90) -and $_.Enabled -eq $true }
-    if ($InactiveUsers.Count -gt 0) {
-        Save-Result -Category "계정 보안" -Item "비활성 계정" -Status "WARNING" -Details "$($InactiveUsers.Count) 개의 비활성 계정 발견 (90일 이상 미사용)" -Risk "MEDIUM"
-        Write-Host "   ⚠️ $($InactiveUsers.Count) 개의 비활성 계정이 발견되었습니다." -ForegroundColor Yellow
+    $InactiveCount = if ($InactiveUsers) { $InactiveUsers.Count } else { 0 }
+
+    if ($InactiveCount -gt 0) {
+        Save-Result -Category "계정 보안" -Item "비활성 계정" -Status "WARNING" -Details "$InactiveCount 개의 비활성 계정 발견 (90일 이상 미사용)" -Risk "MEDIUM"
+        Write-Host "   ⚠️ $InactiveCount 개의 비활성 계정이 발견되었습니다." -ForegroundColor Yellow
     } else {
         Save-Result -Category "계정 보안" -Item "비활성 계정" -Status "PASS" -Details "비활성 계정이 없음" -Risk "LOW"
         Write-Host "   ✅ 비활성 계정이 없습니다." -ForegroundColor Green

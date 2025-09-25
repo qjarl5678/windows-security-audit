@@ -4,6 +4,9 @@
 # 버전: 1.0
 # 날짜: 2024
 
+# UTF-8 인코딩 설정
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
 param(
     [switch]$QuickCheck,
     [switch]$DetailedReport,
@@ -38,6 +41,9 @@ function Write-Log {
 # 결과 저장 함수
 function Save-Result {
     param([string]$Category, [string]$Item, [string]$Status, [string]$Details = "", [string]$Risk = "LOW")
+    if (-not $Script:Results.ContainsKey($Category)) {
+        $Script:Results[$Category] = @()
+    }
     $Script:Results[$Category] += @{
         Item = $Item
         Status = $Status

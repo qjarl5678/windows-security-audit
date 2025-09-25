@@ -1,0 +1,21 @@
+# Claude settings
+.claude/
+
+# Logs
+Logs/
+*.log
+
+# Reports
+Reports/
+*.html
+
+# Temporary files
+*.tmp
+*.temp
+
+# PowerShell execution policy files
+*.ps1xml
+
+# Windows system files
+Thumbs.db
+Desktop.ini
