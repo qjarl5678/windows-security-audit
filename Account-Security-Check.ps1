@@ -26,10 +26,19 @@ try {
 # 2. 암호 정책 점검
 Write-Host "2. 암호 정책 점검 중..." -ForegroundColor Cyan
 try {
-    $PasswordPolicy = Get-LocalSecurityPolicy -Area SECURITY_POLICY | Where-Object { $_.Name -like "*Password*" }
-    
+    # secedit을 사용하여 보안 정책 확인
+    $TempFile = "$env:TEMP\secpol.cfg"
+    secedit /export /cfg $TempFile /quiet
+    $SecPol = Get-Content $TempFile -ErrorAction SilentlyContinue
+
     # 최소 암호 길이 확인
-    $MinLength = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" -Name "MinimumPasswordLength" -ErrorAction SilentlyContinue).MinimumPasswordLength
+    $MinLengthLine = $SecPol | Where-Object { $_ -like "*MinimumPasswordLength*" }
+    if ($MinLengthLine) {
+        $MinLength = [int]($MinLengthLine -split "=")[1].Trim()
+    } else {
+        $MinLength = 0
+    }
+
     if ($MinLength -lt 8) {
         Save-Result -Category "계정 보안" -Item "최소 암호 길이" -Status "FAIL" -Details "최소 암호 길이가 $MinLength 자로 부족함 (권장: 8자 이상)" -Risk "HIGH"
         Write-Host "   ❌ 최소 암호 길이가 $MinLength 자로 부족합니다." -ForegroundColor Red
@@ -37,15 +46,29 @@ try {
         Save-Result -Category "계정 보안" -Item "최소 암호 길이" -Status "PASS" -Details "최소 암호 길이가 $MinLength 자로 적절함" -Risk "LOW"
         Write-Host "   ✅ 최소 암호 길이가 $MinLength 자로 적절합니다." -ForegroundColor Green
     }
+
+    # 임시 파일 삭제
+    Remove-Item $TempFile -ErrorAction SilentlyContinue
 } catch {
-    Save-Result -Category "계정 보안" -Item "암호 정책 점검" -Status "FAIL" -Details "암호 정책 정보를 가져올 수 없음" -Risk "HIGH"
+    Save-Result -Category "계정 보안" -Item "암호 정책 점검" -Status "FAIL" -Details "암호 정책 정보를 가져올 수 없음: $($_.Exception.Message)" -Risk "HIGH"
     Write-Host "   ❌ 암호 정책 정보를 가져올 수 없습니다." -ForegroundColor Red
 }
 
 # 3. 계정 잠금 정책 점검
 Write-Host "3. 계정 잠금 정책 점검 중..." -ForegroundColor Cyan
 try {
-    $LockoutThreshold = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" -Name "LockoutThreshold" -ErrorAction SilentlyContinue).LockoutThreshold
+    # secedit을 사용하여 잠금 정책 확인
+    $TempFile = "$env:TEMP\secpol.cfg"
+    secedit /export /cfg $TempFile /quiet
+    $SecPol = Get-Content $TempFile -ErrorAction SilentlyContinue
+
+    $LockoutThresholdLine = $SecPol | Where-Object { $_ -like "*LockoutBadCount*" }
+    if ($LockoutThresholdLine) {
+        $LockoutThreshold = [int]($LockoutThresholdLine -split "=")[1].Trim()
+    } else {
+        $LockoutThreshold = 0
+    }
+
     if ($LockoutThreshold -eq 0 -or $LockoutThreshold -gt 5) {
         Save-Result -Category "계정 보안" -Item "계정 잠금 정책" -Status "WARNING" -Details "계정 잠금 임계값이 $LockoutThreshold 로 부적절함" -Risk "MEDIUM"
         Write-Host "   ⚠️ 계정 잠금 정책이 부적절합니다." -ForegroundColor Yellow
@@ -53,8 +76,10 @@ try {
         Save-Result -Category "계정 보안" -Item "계정 잠금 정책" -Status "PASS" -Details "계정 잠금 임계값이 $LockoutThreshold 로 적절함" -Risk "LOW"
         Write-Host "   ✅ 계정 잠금 정책이 적절합니다." -ForegroundColor Green
     }
+
+    Remove-Item $TempFile -ErrorAction SilentlyContinue
 } catch {
-    Save-Result -Category "계정 보안" -Item "계정 잠금 정책" -Status "FAIL" -Details "계정 잠금 정책 정보를 가져올 수 없음" -Risk "HIGH"
+    Save-Result -Category "계정 보안" -Item "계정 잠금 정책" -Status "FAIL" -Details "계정 잠금 정책 정보를 가져올 수 없음: $($_.Exception.Message)" -Risk "HIGH"
     Write-Host "   ❌ 계정 잠금 정책 정보를 가져올 수 없습니다." -ForegroundColor Red
 }
 
@@ -95,7 +120,18 @@ try {
 # 6. 암호 만료 정책 점검
 Write-Host "6. 암호 만료 정책 점검 중..." -ForegroundColor Cyan
 try {
-    $MaxPasswordAge = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters" -Name "MaximumPasswordAge" -ErrorAction SilentlyContinue).MaximumPasswordAge
+    # secedit을 사용하여 암호 만료 정책 확인
+    $TempFile = "$env:TEMP\secpol.cfg"
+    secedit /export /cfg $TempFile /quiet
+    $SecPol = Get-Content $TempFile -ErrorAction SilentlyContinue
+
+    $MaxPasswordAgeLine = $SecPol | Where-Object { $_ -like "*MaximumPasswordAge*" }
+    if ($MaxPasswordAgeLine) {
+        $MaxPasswordAge = [int]($MaxPasswordAgeLine -split "=")[1].Trim()
+    } else {
+        $MaxPasswordAge = 0
+    }
+
     if ($MaxPasswordAge -eq 0 -or $MaxPasswordAge -gt 90) {
         Save-Result -Category "계정 보안" -Item "암호 만료 정책" -Status "WARNING" -Details "암호 최대 사용 기간이 $MaxPasswordAge 일로 부적절함" -Risk "MEDIUM"
         Write-Host "   ⚠️ 암호 만료 정책이 부적절합니다." -ForegroundColor Yellow
@@ -103,8 +139,10 @@ try {
         Save-Result -Category "계정 보안" -Item "암호 만료 정책" -Status "PASS" -Details "암호 최대 사용 기간이 $MaxPasswordAge 일로 적절함" -Risk "LOW"
         Write-Host "   ✅ 암호 만료 정책이 적절합니다." -ForegroundColor Green
     }
+
+    Remove-Item $TempFile -ErrorAction SilentlyContinue
 } catch {
-    Save-Result -Category "계정 보안" -Item "암호 만료 정책" -Status "FAIL" -Details "암호 만료 정책 정보를 가져올 수 없음" -Risk "HIGH"
+    Save-Result -Category "계정 보안" -Item "암호 만료 정책" -Status "FAIL" -Details "암호 만료 정책 정보를 가져올 수 없음: $($_.Exception.Message)" -Risk "HIGH"
     Write-Host "   ❌ 암호 만료 정책 정보를 가져올 수 없습니다." -ForegroundColor Red
 }
 

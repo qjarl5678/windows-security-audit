@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # 시스템 보안 점검 스크립트
 # System Security Check Script for KISA Security Assessment
 # 작성자: Security Audit Team
