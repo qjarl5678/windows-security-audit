@@ -1,47 +1,85 @@
 # -*- coding: utf-8 -*-
-# KISA 보안 심사용 통합 보안 점검 스크립트
-# Windows Security Audit Script for KISA Security Assessment
-# 작성자: Security Audit Team
-# 버전: 1.0
-# 날짜: 2024
-
-# UTF-8 인코딩 설정 강화
-$OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
-
 param(
     [switch]$QuickCheck,
     [switch]$DetailedReport,
     [string]$OutputPath = ".\Reports"
 )
 
-# 스크립트 실행 전 관리자 권한 확인
+# KISA Security Assessment - Windows Security Audit Script (English)
+# Author: Security Audit Team
+# Version: 1.0
+# Date: 2024
+
+# UTF-8 output configuration (safe defaults)
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
+
+try {
+    chcp 65001 | Out-Null
+    [System.Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8
+} catch {
+}
+
+# Require Administrator
 if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Error "이 스크립트는 관리자 권한으로 실행해야 합니다."
+    Write-Error "This script must be run as Administrator."
     exit 1
 }
 
-# 전역 변수 설정
+# Globals
 $Script:StartTime = Get-Date
 $Script:LogPath = ".\Logs"
-$Script:ReportPath = $OutputPath
+$Script:ReportPath = if ($OutputPath) { $OutputPath } else { ".\Reports" }
+$Script:LogFile = "$Script:LogPath\Security-Audit-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
 $Script:Results = @{}
 
-# 로그 및 보고서 디렉토리 생성
-if (!(Test-Path $Script:LogPath)) { New-Item -ItemType Directory -Path $Script:LogPath -Force }
-if (!(Test-Path $Script:ReportPath)) { New-Item -ItemType Directory -Path $Script:ReportPath -Force }
+# Ensure folders
+Write-Host "Log Path: $Script:LogPath" -ForegroundColor Gray
+Write-Host "Report Path: $Script:ReportPath" -ForegroundColor Gray
 
-# 로그 함수
+if (!(Test-Path $Script:LogPath)) {
+    try {
+        New-Item -ItemType Directory -Path $Script:LogPath -Force | Out-Null
+        Write-Host "Logs folder created." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to create Logs folder: $_" -ForegroundColor Red
+    }
+} else {
+    Write-Host "Logs folder exists." -ForegroundColor Green
+}
+
+if (!(Test-Path $Script:ReportPath)) {
+    try {
+        New-Item -ItemType Directory -Path $Script:ReportPath -Force | Out-Null
+        Write-Host "Reports folder created." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to create Reports folder: $_" -ForegroundColor Red
+    }
+} else {
+    Write-Host "Reports folder exists." -ForegroundColor Green
+}
+
+# Start transcript (session log)
+try {
+    $transcriptPath = Join-Path $Script:LogPath ("Transcript-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + ".txt")
+    Start-Transcript -Path $transcriptPath -ErrorAction Stop | Out-Null
+    Write-Host "Transcript: $transcriptPath" -ForegroundColor Gray
+} catch {
+    Write-Host "Transcript could not be started: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $LogMessage = "[$Timestamp] [$Level] $Message"
     Write-Host $LogMessage
-    $LogMessage | Out-File -FilePath "$Script:LogPath\Security-Audit-$(Get-Date -Format 'yyyyMMdd-HHmmss').log" -Append
+    $LogMessage | Out-File -FilePath $Script:LogFile -Append -Encoding UTF8
 }
 
-# 결과 저장 함수
 function Save-Result {
     param([string]$Category, [string]$Item, [string]$Status, [string]$Details = "", [string]$Risk = "LOW")
     if (-not $Script:Results.ContainsKey($Category)) {
@@ -56,19 +94,18 @@ function Save-Result {
     }
 }
 
-# HTML 보고서 생성 함수
 function Generate-HTMLReport {
     $ReportFile = "$Script:ReportPath\Security-Audit-Report-$(Get-Date -Format 'yyyyMMdd-HHmmss').html"
-    
+
     $HTML = @"
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KISA 보안 심사 점검 보고서</title>
+    <title>KISA Security Assessment - Technical Checks Report</title>
     <style>
-        body { font-family: 'Malgun Gothic', Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        body { font-family: Arial, 'Segoe UI', 'Malgun Gothic', sans-serif; margin: 20px; background-color: #f5f5f5; }
         .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .header { text-align: center; border-bottom: 3px solid #007acc; padding-bottom: 20px; margin-bottom: 30px; }
         .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
@@ -91,23 +128,23 @@ function Generate-HTMLReport {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🛡️ KISA 보안 심사 점검 보고서</h1>
-            <p>생성일시: $(Get-Date -Format 'yyyy년 MM월 dd일 HH:mm:ss')</p>
-            <p>서버명: $env:COMPUTERNAME</p>
+            <h1>KISA Security Assessment - Technical Checks Report</h1>
+            <p>Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
+            <p>Hostname: $env:COMPUTERNAME</p>
         </div>
         
         <div class="summary">
             <div class="summary-card high">
-                <h3>🔴 높은 위험</h3>
-                <div style="font-size: 2em; font-weight: bold;">$($Script:Results.Values | Where-Object { $_.Risk -eq "HIGH" } | Measure-Object).Count</div>
+                <h3>High Risk</h3>
+                <div style="font-size: 2em; font-weight: bold;">$(($Script:Results.Values | ForEach-Object { $_ } | Where-Object { $_.Risk -eq "HIGH" }).Count)</div>
             </div>
             <div class="summary-card medium">
-                <h3>🟡 중간 위험</h3>
-                <div style="font-size: 2em; font-weight: bold;">$($Script:Results.Values | Where-Object { $_.Risk -eq "MEDIUM" } | Measure-Object).Count</div>
+                <h3>Medium Risk</h3>
+                <div style="font-size: 2em; font-weight: bold;">$(($Script:Results.Values | ForEach-Object { $_ } | Where-Object { $_.Risk -eq "MEDIUM" }).Count)</div>
             </div>
             <div class="summary-card low">
-                <h3>🟢 낮은 위험</h3>
-                <div style="font-size: 2em; font-weight: bold;">$($Script:Results.Values | Where-Object { $_.Risk -eq "LOW" } | Measure-Object).Count</div>
+                <h3>Low Risk</h3>
+                <div style="font-size: 2em; font-weight: bold;">$(($Script:Results.Values | ForEach-Object { $_ } | Where-Object { $_.Risk -eq "LOW" }).Count)</div>
             </div>
         </div>
 "@
@@ -121,7 +158,8 @@ function Generate-HTMLReport {
                 "WARNING" { "warning" }
                 default { "" }
             }
-            $RiskClass = "risk-$($Result.Risk.ToLower())"
+            $riskValue = if ($Result.Risk) { $Result.Risk.ToLower() } else { "low" }
+            $RiskClass = "risk-$riskValue"
             
             $HTML += @"
             <div class="item $StatusClass">
@@ -136,75 +174,111 @@ function Generate-HTMLReport {
 
     $HTML += @"
         <div class="footer">
-            <p>이 보고서는 KISA 보안 심사 준비를 위해 자동 생성되었습니다.</p>
-            <p>보고서 생성 시간: $((Get-Date) - $Script:StartTime)</p>
+            <p>This report was automatically generated to prepare for KISA security assessment.</p>
+            <p>Elapsed time: $((Get-Date) - $Script:StartTime)</p>
         </div>
     </div>
 </body>
 </html>
 "@
 
+    if (!(Test-Path $Script:ReportPath)) {
+        New-Item -ItemType Directory -Path $Script:ReportPath -Force | Out-Null
+    }
+
     $HTML | Out-File -FilePath $ReportFile -Encoding UTF8
-    Write-Log "HTML 보고서가 생성되었습니다: $ReportFile"
+    Write-Log "HTML report generated: $ReportFile"
+    Write-Host "Report file: $ReportFile" -ForegroundColor Cyan
     return $ReportFile
 }
 
-# 메인 실행 함수
 function Start-SecurityAudit {
-    Write-Log "KISA 보안 심사 점검을 시작합니다..." "INFO"
+    Write-Log "Starting security checks..." "INFO"
     
-    # 각 카테고리별 점검 실행
     $Categories = @(
         "Account-Security-Check.ps1",
         "System-Security-Check.ps1", 
         "Network-Security-Check.ps1",
         "Log-Security-Check.ps1"
     )
+
+    $total = $Categories.Count
+    $i = 0
+    Write-Progress -Activity "Security Audit" -Status "Preparing..." -PercentComplete 0
     
-    foreach ($Script in $Categories) {
-        if (Test-Path $Script) {
-            Write-Log "$Script 실행 중..." "INFO"
+    foreach ($scriptName in $Categories) {
+        $i++
+        $percent = [int](($i-1) / $total * 100)
+        Write-Progress -Activity "Security Audit" -Status "Running $scriptName ($i of $total)" -PercentComplete $percent
+        if (Test-Path $scriptName) {
+            Write-Log "Running $scriptName ..." "INFO"
             try {
-                & ".\$Script"
-                Write-Log "$Script 실행 완료" "INFO"
+                . ".\$scriptName"
+                Write-Log "$scriptName completed" "INFO"
             }
             catch {
-                Write-Log "$Script 실행 중 오류 발생: $($_.Exception.Message)" "ERROR"
+                Write-Log "Error while running ${scriptName}: $($_.Exception.Message)" "ERROR"
             }
         }
         else {
-            Write-Log "$Script 파일을 찾을 수 없습니다." "WARNING"
+            Write-Log "$scriptName not found" "WARNING"
         }
     }
-    
-    # HTML 보고서 생성
+
+    Write-Progress -Activity "Security Audit" -Status "Generating report..." -PercentComplete 95
     $ReportFile = Generate-HTMLReport
-    Write-Log "보안 점검 완료. 보고서: $ReportFile" "INFO"
+    Write-Log "Security checks finished. Report: $ReportFile" "INFO"
+    Write-Progress -Activity "Security Audit" -Completed
     
-    # 요약 정보 출력
-    $TotalItems = ($Script:Results.Values | Measure-Object).Count
-    $HighRisk = ($Script:Results.Values | Where-Object { $_.Risk -eq "HIGH" } | Measure-Object).Count
-    $MediumRisk = ($Script:Results.Values | Where-Object { $_.Risk -eq "MEDIUM" } | Measure-Object).Count
-    $LowRisk = ($Script:Results.Values | Where-Object { $_.Risk -eq "LOW" } | Measure-Object).Count
+    $AllItems = $Script:Results.Values | ForEach-Object { $_ }
+    $TotalItems = @($AllItems).Count
+    $HighRisk = @($AllItems | Where-Object { $_.Risk -eq "HIGH" }).Count
+    $MediumRisk = @($AllItems | Where-Object { $_.Risk -eq "MEDIUM" }).Count
+    $LowRisk = @($AllItems | Where-Object { $_.Risk -eq "LOW" }).Count
     
-    Write-Host "`n=== 보안 점검 완료 ===" -ForegroundColor Green
-    Write-Host "총 점검 항목: $TotalItems" -ForegroundColor White
-    Write-Host "높은 위험: $HighRisk" -ForegroundColor Red
-    Write-Host "중간 위험: $MediumRisk" -ForegroundColor Yellow  
-    Write-Host "낮은 위험: $LowRisk" -ForegroundColor Green
-    Write-Host "보고서 파일: $ReportFile" -ForegroundColor Cyan
+    Write-Host "`n=== Security Audit Completed ===" -ForegroundColor Green
+    Write-Host "Total Items: $TotalItems" -ForegroundColor White
+    Write-Host "High Risk: $HighRisk" -ForegroundColor Red
+    Write-Host "Medium Risk: $MediumRisk" -ForegroundColor Yellow
+    Write-Host "Low Risk: $LowRisk" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Report Location:" -ForegroundColor Cyan
+    Write-Host "   $ReportFile" -ForegroundColor White
+
+    $AbsolutePath = (Resolve-Path $ReportFile -ErrorAction SilentlyContinue)
+    if ($AbsolutePath) {
+        Write-Host "   Full Path: $AbsolutePath" -ForegroundColor Gray
+    }
 }
 
-# 스크립트 시작
-Write-Host "🛡️ KISA 보안 심사 점검 도구 v1.0" -ForegroundColor Cyan
-Write-Host "=================================" -ForegroundColor Cyan
+Write-Host "KISA Security Assessment Tool v1.0" -ForegroundColor Cyan
+Write-Host "================================" -ForegroundColor Cyan
 
-# 결과 저장소 초기화
 $Script:Results = @{
-    "계정 보안" = @()
-    "시스템 보안" = @()
-    "네트워크 보안" = @()
-    "로그 보안" = @()
+    "Account Security" = @()
+    "System Security" = @()
+    "Network Security" = @()
+    "Log Security" = @()
 }
 
 Start-SecurityAudit
+
+Write-Host "`n=== Execution completed ===" -ForegroundColor Green
+Write-Host "Press any key to close this window..." -ForegroundColor Yellow
+
+try {
+    if ($Host.Name -eq "ConsoleHost") {
+        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    } else {
+        throw "Not ConsoleHost"
+    }
+} catch {
+    try {
+        Read-Host "`nType anything and press Enter"
+    } catch {
+        cmd /c pause
+    }
+}
+
+# Stop transcript
+try { Stop-Transcript | Out-Null } catch {}
