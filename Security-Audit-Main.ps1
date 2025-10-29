@@ -81,11 +81,12 @@ function Write-Log {
 }
 
 function Save-Result {
-    param([string]$Category, [string]$Item, [string]$Status, [string]$Details = "", [string]$Risk = "LOW")
+    param([string]$Category, [string]$Item, [string]$Status, [string]$Details = "", [string]$Risk = "LOW", [string]$ItemCode = "")
     if (-not $Script:Results.ContainsKey($Category)) {
         $Script:Results[$Category] = @()
     }
     $Script:Results[$Category] += @{
+        ItemCode = $ItemCode
         Item = $Item
         Status = $Status
         Details = $Details
@@ -160,10 +161,11 @@ function Generate-HTMLReport {
             }
             $riskValue = if ($Result.Risk) { $Result.Risk.ToLower() } else { "low" }
             $RiskClass = "risk-$riskValue"
-            
+            $codeDisplay = if ($Result.ItemCode) { "[$($Result.ItemCode)] " } else { "" }
+
             $HTML += @"
             <div class="item $StatusClass">
-                <strong>$($Result.Item)</strong> - 
+                <strong>$codeDisplay$($Result.Item)</strong> -
                 <span class="$RiskClass">$($Result.Status)</span>
                 <br><small>$($Result.Details)</small>
             </div>
@@ -189,17 +191,82 @@ function Generate-HTMLReport {
     $HTML | Out-File -FilePath $ReportFile -Encoding UTF8
     Write-Log "HTML report generated: $ReportFile"
     Write-Host "Report file: $ReportFile" -ForegroundColor Cyan
+
+    # Generate PDF from HTML
+    $PDFFile = Convert-HTMLToPDF -HTMLFile $ReportFile
+    if ($PDFFile) {
+        Write-Host "PDF report: $PDFFile" -ForegroundColor Cyan
+    }
+
     return $ReportFile
+}
+
+function Convert-HTMLToPDF {
+    param([string]$HTMLFile)
+
+    $PDFFile = $HTMLFile -replace '\.html$', '.pdf'
+
+    Write-Host "Generating PDF report..." -ForegroundColor Yellow
+
+    try {
+        # Try Microsoft Edge first (most common on Windows 10/11)
+        $edgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        if (!(Test-Path $edgePath)) {
+            $edgePath = "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+        }
+
+        if (Test-Path $edgePath) {
+            Write-Host "Using Microsoft Edge to generate PDF..." -ForegroundColor Cyan
+            $process = Start-Process -FilePath $edgePath -ArgumentList "--headless", "--disable-gpu", "--print-to-pdf=`"$PDFFile`"", "`"$HTMLFile`"" -Wait -PassThru -WindowStyle Hidden
+
+            if ($process.ExitCode -eq 0 -and (Test-Path $PDFFile)) {
+                Write-Log "PDF report generated: $PDFFile"
+                return $PDFFile
+            }
+        }
+
+        # Try Google Chrome as fallback
+        $chromePaths = @(
+            "C:\Program Files\Google\Chrome\Application\chrome.exe",
+            "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe"
+        )
+
+        foreach ($chromePath in $chromePaths) {
+            if (Test-Path $chromePath) {
+                Write-Host "Using Google Chrome to generate PDF..." -ForegroundColor Cyan
+                $process = Start-Process -FilePath $chromePath -ArgumentList "--headless", "--disable-gpu", "--print-to-pdf=`"$PDFFile`"", "`"$HTMLFile`"" -Wait -PassThru -WindowStyle Hidden
+
+                if ($process.ExitCode -eq 0 -and (Test-Path $PDFFile)) {
+                    Write-Log "PDF report generated: $PDFFile"
+                    return $PDFFile
+                }
+            }
+        }
+
+        Write-Host "Unable to generate PDF: Edge or Chrome not found" -ForegroundColor Yellow
+        Write-Host "You can manually open the HTML file in a browser and print to PDF" -ForegroundColor Yellow
+        Write-Log "PDF generation skipped: Browser not found"
+        return $null
+
+    } catch {
+        Write-Host "PDF generation failed: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Log "PDF generation error: $($_.Exception.Message)"
+        return $null
+    }
 }
 
 function Start-SecurityAudit {
     Write-Log "Starting security checks..." "INFO"
-    
+
     $Categories = @(
         "Account-Security-Check.ps1",
-        "System-Security-Check.ps1", 
+        "System-Security-Check.ps1",
+        "Service-Security-Check.ps1",
         "Network-Security-Check.ps1",
-        "Log-Security-Check.ps1"
+        "IIS-Security-Check.ps1",
+        "Log-Security-Check.ps1",
+        "DB-Security-Check.ps1"
     )
 
     $total = $Categories.Count
@@ -257,8 +324,11 @@ Write-Host "================================" -ForegroundColor Cyan
 $Script:Results = @{
     "Account Security" = @()
     "System Security" = @()
+    "Service Security" = @()
     "Network Security" = @()
+    "IIS Security" = @()
     "Log Security" = @()
+    "Database Security" = @()
 }
 
 Start-SecurityAudit
